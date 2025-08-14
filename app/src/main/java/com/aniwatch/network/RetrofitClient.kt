@@ -1,5 +1,6 @@
 package com.aniwatch.network
 
+import com.aniwatch.network.ApiService
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
