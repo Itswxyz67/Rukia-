@@ -1,3 +1,4 @@
+
 name: Android CI
 
 on:
@@ -8,12 +9,13 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: set up JDK 17
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up JDK 17
       uses: actions/setup-java@v3
       with:
         java-version: '17'
@@ -26,10 +28,92 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Build with Gradle
-      run: ./gradlew build
+    - name: Display Gradle version
+      run: ./gradlew --version
+
+    - name: Display project structure
+      run: |
+        echo "=== PROJECT STRUCTURE ==="
+        find . -name "*.kt" -o -name "*.java" | head -20
+        echo "=== BUILD FILES ==="
+        find . -name "build.gradle*" -o -name "gradle.properties"
+
+    - name: Display Kotlin files in app module
+      run: |
+        echo "=== KOTLIN FILES IN APP ==="
+        find app/src -name "*.kt" 2>/dev/null || echo "No Kotlin files found in app/src"
+
+    - name: Check Gradle dependencies
+      run: |
+        echo "=== GRADLE DEPENDENCIES DEBUG ==="
+        ./gradlew dependencies --configuration debugCompileClasspath | head -50
+
+    - name: Clean build (verbose)
+      run: |
+        echo "=== CLEANING PROJECT ==="
+        ./gradlew clean --info --stacktrace
+
+    - name: Compile Debug Kotlin (super verbose)
+      run: |
+        echo "=== COMPILING DEBUG KOTLIN WITH MAXIMUM VERBOSITY ==="
+        ./gradlew compileDebugKotlin --info --stacktrace --debug --warning-mode all 2>&1 | tee kotlin-compilation.log
+
+    - name: Display compilation errors if any
+      if: failure()
+      run: |
+        echo "=== KOTLIN COMPILATION LOG ==="
+        cat kotlin-compilation.log || echo "No compilation log found"
+        echo "=== LOOKING FOR ERROR PATTERNS ==="
+        grep -i "error\|exception\|failed" kotlin-compilation.log || echo "No obvious errors found in log"
+
+    - name: Check for syntax errors in Kotlin files
+      if: failure()
+      run: |
+        echo "=== CHECKING KOTLIN SYNTAX ==="
+        for file in $(find app/src -name "*.kt" 2>/dev/null); do
+          echo "Checking: $file"
+          head -10 "$file"
+          echo "---"
+        done
+
+    - name: Display build.gradle files
+      if: failure()
+      run: |
+        echo "=== APP BUILD.GRADLE ==="
+        cat app/build.gradle 2>/dev/null || cat app/build.gradle.kts 2>/dev/null || echo "No app build file found"
+        echo "=== PROJECT BUILD.GRADLE ==="
+        cat build.gradle 2>/dev/null || cat build.gradle.kts 2>/dev/null || echo "No project build file found"
+
+    - name: Show Gradle properties
+      if: failure()
+      run: |
+        echo "=== GRADLE.PROPERTIES ==="
+        cat gradle.properties 2>/dev/null || echo "No gradle.properties found"
+        echo "=== LOCAL.PROPERTIES ==="
+        cat local.properties 2>/dev/null || echo "No local.properties found"
+
+    - name: Try compiling with different flags
+      if: failure()
+      run: |
+        echo "=== TRYING WITH DIFFERENT COMPILATION FLAGS ==="
+        ./gradlew compileDebugKotlin --continue --stacktrace 2>&1 | head -100
+
+    - name: Build with Gradle (detailed logging)
+      run: |
+        echo "=== FULL BUILD WITH DETAILED LOGGING ==="
+        ./gradlew build --info --stacktrace --warning-mode all --continue
+
+    - name: Upload compilation logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: compilation-logs
+        path: |
+          kotlin-compilation.log
+          **/*.log
 
     - name: Upload APK
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
